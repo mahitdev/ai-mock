@@ -40,10 +40,10 @@ const preferredModels = [
 ].filter((m): m is string => Boolean(m));
 
 const generationConfig = {
-  temperature: 1,
-  topP: 0.95,
-  topK: 40,
-  maxOutputTokens: 8192,
+  temperature: 0.7,
+  topP: 0.9,
+  topK: 32,
+  maxOutputTokens: 2048,
   responseMimeType: "text/plain",
 };
 

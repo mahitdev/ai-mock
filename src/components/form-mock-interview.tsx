@@ -51,6 +51,8 @@ const formSchema = z.object({
 type FormData = z.infer<typeof formSchema>;
 
 type InterviewQuestion = { question: string; answer: string };
+const AI_TIMEOUT_MS = 60000;
+const AI_RETRY_TIMEOUT_MS = 90000;
 
 const withTimeout = async <T,>(
   promise: Promise<T>,
@@ -208,19 +210,34 @@ export const FormMockInterview = ({ initialData }: FormMockInterviewProps) => {
 
       let questions: InterviewQuestion[] = [];
       try {
-        questions = await withTimeout(
-          generateAiResponse(data),
-          30000,
-          "AI generation timed out"
-        );
+        questions = await withTimeout(generateAiResponse(data), AI_TIMEOUT_MS, "AI generation timed out");
       } catch (error) {
-        console.error("AI generation failed, using fallback questions", error);
-        const reason =
-          error instanceof Error ? error.message : "Unknown AI error";
-        questions = buildFallbackQuestions(data);
-        toast.warning("AI generation issue", {
-          description: `Using fallback interview questions for now. (${reason})`,
-        });
+        const reason = error instanceof Error ? error.message : "Unknown AI error";
+        const isTimeout = reason.toLowerCase().includes("timed out");
+
+        if (isTimeout) {
+          try {
+            questions = await withTimeout(
+              generateAiResponse(data),
+              AI_RETRY_TIMEOUT_MS,
+              "AI generation timed out after retry"
+            );
+          } catch (retryError) {
+            console.error("AI generation failed after retry, using fallback questions", retryError);
+            const retryReason =
+              retryError instanceof Error ? retryError.message : "Unknown AI error";
+            questions = buildFallbackQuestions(data);
+            toast.warning("AI generation issue", {
+              description: `Using fallback interview questions for now. (${retryReason})`,
+            });
+          }
+        } else {
+          console.error("AI generation failed, using fallback questions", error);
+          questions = buildFallbackQuestions(data);
+          toast.warning("AI generation issue", {
+            description: `Using fallback interview questions for now. (${reason})`,
+          });
+        }
       }
 
       if (initialData) {
