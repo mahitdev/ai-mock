@@ -54,6 +54,52 @@ type InterviewQuestion = { question: string; answer: string };
 const AI_TIMEOUT_MS = 60000;
 const AI_RETRY_TIMEOUT_MS = 90000;
 
+const extractFirstJsonArray = (text: string): string | null => {
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let isEscaped = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+
+    if (inString) {
+      if (isEscaped) {
+        isEscaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        isEscaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === "[") {
+      if (depth === 0) start = i;
+      depth += 1;
+      continue;
+    }
+
+    if (char === "]" && depth > 0) {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        return text.slice(start, i + 1);
+      }
+    }
+  }
+
+  return null;
+};
+
 const withTimeout = async <T,>(
   promise: Promise<T>,
   ms: number,
@@ -99,27 +145,18 @@ export const FormMockInterview = ({ initialData }: FormMockInterviewProps) => {
     : { title: "Created..!", description: "New Mock Interview created..." };
 
   const cleanAiResponse = (responseText: string) => {
-    // Step 1: Trim any surrounding whitespace
     let cleanText = responseText.trim();
 
-    // Step 2: Remove any occurrences of "json" or code block symbols (``` or `)
-    cleanText = cleanText.replace(/(json|```|`)/g, "");
+    // Remove markdown code fences but keep payload intact.
+    cleanText = cleanText.replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
 
-    // Step 3: Extract a JSON array by capturing text between square brackets
-    const jsonArrayMatch = cleanText.match(/\[.*\]/s);
-    if (jsonArrayMatch) {
-      cleanText = jsonArrayMatch[0];
-    } else {
-      throw new Error("No JSON array found in response");
-    }
-
-    cleanText = Array.from(cleanText)
+    const extractedArray = extractFirstJsonArray(cleanText) ?? cleanText;
+    const normalized = Array.from(extractedArray)
       .map((char) => (char.charCodeAt(0) < 32 ? " " : char))
       .join("");
 
-    // Step 4: Parse the clean JSON text into an array of objects
     try {
-      return JSON.parse(cleanText);
+      return JSON.parse(normalized);
     } catch (error) {
       throw new Error("Invalid JSON format: " + (error as Error)?.message);
     }
