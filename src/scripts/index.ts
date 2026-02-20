@@ -8,10 +8,30 @@ const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 const configuredModel = import.meta.env.VITE_GEMINI_MODEL as string | undefined;
 const genAI = new GoogleGenerativeAI(apiKey || "");
 
+const resolveConfiguredModels = (model?: string): string[] => {
+  if (!model) return [];
+
+  const normalized = model.trim().toLowerCase();
+  if (
+    normalized === "gemini pro3" ||
+    normalized === "gemini-pro3" ||
+    normalized === "pro3"
+  ) {
+    // Alias support for user-friendly naming.
+    return ["gemini-2.5-pro", "gemini-2.5-pro-latest", "gemini-1.5-pro-latest"];
+  }
+
+  return [model.trim()];
+};
+
+const configuredModels = resolveConfiguredModels(configuredModel);
+
 const preferredModels = [
-  configuredModel,
+  ...configuredModels,
   "gemini-1.5-flash-latest",
   "gemini-1.5-pro-latest",
+  "gemini-2.5-pro",
+  "gemini-2.5-pro-latest",
   "gemini-2.5-flash",
   "gemini-2.0-flash",
   "gemini-2.0-flash-exp",
@@ -83,12 +103,7 @@ const getCandidateModels = async (): Promise<string[]> => {
   // Prefer what the API says is currently available for this key/account.
   // Fall back to curated defaults only if listing fails or returns empty.
   const orderedCandidates =
-    available.length > 0
-      ? [
-          ...available,
-          ...preferredModels.filter((model) => available.includes(model)),
-        ]
-      : preferredModels;
+    available.length > 0 ? [...preferredModels, ...available] : preferredModels;
 
   cachedModelList = [...new Set(orderedCandidates.map(normalizeModelId))];
   return cachedModelList;
