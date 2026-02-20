@@ -10,9 +10,12 @@ const genAI = new GoogleGenerativeAI(apiKey || "");
 
 const preferredModels = [
   configuredModel,
+  "gemini-1.5-flash-latest",
+  "gemini-1.5-pro-latest",
   "gemini-2.5-flash",
   "gemini-2.0-flash",
   "gemini-2.0-flash-exp",
+  "gemini-2.0-flash-lite",
   "gemini-1.5-flash",
 ].filter((m): m is string => Boolean(m));
 
@@ -71,10 +74,23 @@ const listAvailableModels = async (): Promise<string[]> => {
 
 let cachedModelList: string[] | null = null;
 
+const normalizeModelId = (modelId: string) => modelId.replace(/^models\//, "");
+
 const getCandidateModels = async (): Promise<string[]> => {
   if (cachedModelList) return cachedModelList;
   const available = await listAvailableModels();
-  cachedModelList = [...new Set([...preferredModels, ...available])];
+
+  // Prefer what the API says is currently available for this key/account.
+  // Fall back to curated defaults only if listing fails or returns empty.
+  const orderedCandidates =
+    available.length > 0
+      ? [
+          ...available,
+          ...preferredModels.filter((model) => available.includes(model)),
+        ]
+      : preferredModels;
+
+  cachedModelList = [...new Set(orderedCandidates.map(normalizeModelId))];
   return cachedModelList;
 };
 
@@ -85,7 +101,8 @@ export const chatSession = {
     const candidates = await getCandidateModels();
     let lastError: unknown = null;
 
-    for (const modelId of candidates) {
+    for (const candidate of candidates) {
+      const modelId = normalizeModelId(candidate);
       try {
         const model = genAI.getGenerativeModel({ model: modelId });
         const session = model.startChat({ generationConfig, safetySettings });
